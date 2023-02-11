@@ -4,11 +4,11 @@ import argparse
 import elasticsearch
 from elasticsearch import helpers
 import concurrent.futures
-import bz2
+import gzip
 import json
 import traceback
 import time
-
+from tqdm import tqdm
 
 class WikiDataItem():
 
@@ -26,7 +26,7 @@ class WikiDataItem():
         else:
             self.datatype = wikidata_json["datatype"]
 
-        self.lastrevid = wikidata_json["lastrevid"]
+        #self.lastrevid = wikidata_json["lastrevid"]
 
         self.language_label = None
         self.language = None
@@ -103,9 +103,9 @@ class ElasticDumper:
     def __prepare_action(self, item):
         action = {
             "_index": "wikipedia-unknown-lang",
+            "_type": item.type,
             "_id": item.id,
             "_source": {
-                "type": item.type,
                 "timestamp": datetime.datetime.now()
             }
         }
@@ -154,6 +154,7 @@ class ElasticDumper:
                         action["_source"]["content"] = content
                     if summary:
                         action["_source"]["summary"] = summary
+
 
             except Exception as e:
                 print(e)
@@ -205,9 +206,10 @@ def dump(args):
     start_line = args.start_line
     end_line = args.end_line
     tasks = []
-    dumper = ElasticDumper("addr", "wikipedia")
-    with bz2.open(args.input, "r") as bz2_file:
-        for line in bz2_file:
+    addr = "192.168.102.129"
+    dumper = ElasticDumper(addr, "wikipedia")
+    with gzip.open(args.input, "r") as bz2_file:
+        for line in tqdm(bz2_file):
             if i < start_line - 1:
                 i += 1
                 continue
@@ -224,9 +226,7 @@ def dump(args):
                 tasks.append(line)
             if len(tasks) >= batch_size:
                 try:
-                    one_piece = time.time()
                     dumper.write_lines(tasks)
-                    print(time.time() - one_piece)
 
                     tasks = []
                 except Exception as e:
