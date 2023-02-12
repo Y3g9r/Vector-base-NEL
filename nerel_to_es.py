@@ -5,6 +5,7 @@ import argparse
 import elasticsearch
 from elasticsearch import helpers
 import concurrent.futures
+import re
 
 class ElasticDumper:
 
@@ -56,10 +57,10 @@ class ElasticDumper:
 def read_txt_file(file_path):
     text_data = []
 
-    with open(file_path, 'r') as f:
+    with open(file_path, encoding="utf8") as f:
         lines = f.readlines()
         for line in lines:
-            if len(line) is not 0:
+            if len(line) != 0:
                 text_data.append(line)
 
     return text_data
@@ -67,26 +68,28 @@ def read_txt_file(file_path):
 
 def read_ann_file(file_path):
     text_meta = {}
-    with open(file_path, 'r') as f:
+    with open(file_path, encoding="utf8") as f:
         lines = f.readlines()
         for line in lines:
-            if len(line) is not 0:
-                parts_of_line = line.split(' ')
+            if len(line) != 0:
+                parts_of_line = re.sub(r'\t', ' ', line) .split(' ')
+                parts_of_line[-1] = parts_of_line[-1].rstrip('\n')
                 if line.startswith("T"):
                     pos = []
                     for info in enumerate(parts_of_line):
+                        print(parts_of_line)
                         if parts_of_line[info].isdigit():
-                            pos.append(int(parts_of_line[info], parts_of_line[info+1]))
-                        meta_data[parts_of_line[0]] = [pos]
-                        meta_data[parts_of_line[0]].append[" ".join(parts_of_line[info+2:])]
+                            pos.append(int(parts_of_line[info]), int(parts_of_line[info+1]))
+                        text_meta[parts_of_line[0]] = [pos]
+                        text_meta[parts_of_line[0]].append[" ".join(parts_of_line[info+2:])]
                         break
                 if line.startswith("N"):
                     for info in enumerate(parts_of_line):
                         if parts_of_line[info].startswith("T"):
                             if parts_of_line[info+1].startswith("Wikidata:") and \
-                                    parts_of_line[info+1].lstrip("Wikidata:") is not "NULL":
-                                meta_data[parts_of_line[info]] = \
-                                    [meta_data[parts_of_line[info]], parts_of_line[info+1].lstrip("Wikidata:")]
+                                    parts_of_line[info+1].lstrip("Wikidata:") != "NULL":
+                                text_meta[parts_of_line[info]] = \
+                                    [text_meta[parts_of_line[info]], parts_of_line[info+1].lstrip("Wikidata:")]
                                 break
 
     return text_meta
@@ -96,12 +99,15 @@ def dump(args):
     os.chdir(args.input)
 
     es_client = ElasticDumper("192.168.102.129")
+    passed_files = []
     for file in os.listdir():
-        if file.endswith(".ann"):
+        if file not in passed_files and file.endswith(".ann"):
             try:
                 text_file = file.rstrip(".ann")+".txt"
                 text_data = read_txt_file(text_file)
                 text_meta = read_ann_file(file)
+                passed_files.append(file)
+                passed_files.append(text_file)
             except Exception as e:
                 print(e)
                 continue
@@ -110,6 +116,8 @@ def dump(args):
                 ann_file = file.rstrip(".txt") + ".ann"
                 text_data = read_txt_file(file)
                 text_meta = read_ann_file(ann_file)
+                passed_files.append(file)
+                passed_files.append(ann_file)
             except Exception as e:
                 print(e)
                 continue
