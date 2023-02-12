@@ -6,7 +6,8 @@ import elasticsearch
 from elasticsearch import helpers
 import concurrent.futures
 import re
-import copy
+import datetime
+
 
 class ElasticDumper:
 
@@ -34,7 +35,7 @@ class ElasticDumper:
             try:
                 res = future.result()
                 if res:
-                    actions.append(res)
+                    records.append(res)
             except Exception:
                 print(traceback.format_exc())
                 pass
@@ -128,10 +129,10 @@ def dump(args):
                 continue
 
         records = []
-        for record in text_meta:
-            print(text_data)
+        for record in text_meta.values():
             for record_text in text_data:
                 if record_text[record[0][0]:record[0][1]] == record[1]:
+                    print(record)
                     records.append([record[2], record_text, record[0]])
                     break
         es_client.write_records(records)
