@@ -6,6 +6,7 @@ import elasticsearch
 from elasticsearch import helpers
 import concurrent.futures
 import re
+import copy
 
 class ElasticDumper:
 
@@ -60,8 +61,8 @@ def read_txt_file(file_path):
     with open(file_path, encoding="utf8") as f:
         lines = f.readlines()
         for line in lines:
-            if len(line) != 0:
-                text_data.append(line)
+            if len(line) != 0 and line != '\n':
+                text_data.append(line.rstrip('\n'))
 
     return text_data
 
@@ -76,20 +77,24 @@ def read_ann_file(file_path):
                 parts_of_line[-1] = parts_of_line[-1].rstrip('\n')
                 if line.startswith("T"):
                     pos = []
-                    for info in enumerate(parts_of_line):
-                        print(parts_of_line)
-                        if parts_of_line[info].isdigit():
-                            pos.append(int(parts_of_line[info]), int(parts_of_line[info+1]))
+                    for i, info in enumerate(parts_of_line):
+
+                        if info.isdigit():
+                            pos.append(int(parts_of_line[i]))
+
+                            pos.append(int(parts_of_line[i+1]))
+                        else:
+                            continue
                         text_meta[parts_of_line[0]] = [pos]
-                        text_meta[parts_of_line[0]].append[" ".join(parts_of_line[info+2:])]
+                        text_meta[parts_of_line[0]].append(" ".join(parts_of_line[i+2:]))
                         break
+
                 if line.startswith("N"):
-                    for info in enumerate(parts_of_line):
-                        if parts_of_line[info].startswith("T"):
-                            if parts_of_line[info+1].startswith("Wikidata:") and \
-                                    parts_of_line[info+1].lstrip("Wikidata:") != "NULL":
-                                text_meta[parts_of_line[info]] = \
-                                    [text_meta[parts_of_line[info]], parts_of_line[info+1].lstrip("Wikidata:")]
+                    for i, info in enumerate(parts_of_line):
+                        if info.startswith("T"):
+                            if parts_of_line[i+1].startswith("Wikidata:") and \
+                                    parts_of_line[i+1].lstrip("Wikidata:") != "NULL":
+                                text_meta[info].append(parts_of_line[i+1].lstrip("Wikidata:"))
                                 break
 
     return text_meta
@@ -124,6 +129,7 @@ def dump(args):
 
         records = []
         for record in text_meta:
+            print(text_data)
             for record_text in text_data:
                 if record_text[record[0][0]:record[0][1]] == record[1]:
                     records.append([record[2], record_text, record[0]])
