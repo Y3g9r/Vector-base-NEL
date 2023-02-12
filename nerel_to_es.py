@@ -4,6 +4,54 @@ import argparse
 
 import elasticsearch
 from elasticsearch import helpers
+import concurrent.futures
+
+class ElasticDumper:
+
+    def __init__(self, es_host, max_threads=100):
+        self.es = elasticsearch.Elasticsearch(es_host)
+        self.max_threads = max_threads
+
+    def write_records(self, records_list):
+        records = self._prepare_actions(records_list)
+        helpers.bulk(self.es, records)
+
+    def _prepare_actions(self, records_list):
+
+        if len(records_list) > self.max_threads:
+            num_threads = self.max_threads
+        else:
+            num_threads = len(records_list)
+
+        futures = []
+        records = []
+        with concurrent.futures.ThreadPoolExecutor(num_threads) as executor:
+            for record in records_list:
+                futures.append(executor.submit(self.__prepare_action, record=record))
+        for future in futures:
+            try:
+                res = future.result()
+                if res:
+                    actions.append(res)
+            except Exception:
+                print(traceback.format_exc())
+                pass
+        return records
+
+    def __prepare_action(self, record):
+        action = {
+            "_index": "wikipedia-ru-text",
+            "_type": "text",
+            "_id": record[0],
+            "_source": {
+                "timestamp": datetime.datetime.now(),
+                "position": record[2],
+                "text": record[1]
+            }
+        }
+
+        return action
+
 
 def read_txt_file(file_path):
     text_data = []
@@ -46,6 +94,8 @@ def read_ann_file(file_path):
 
 def dump(args):
     os.chdir(args.input)
+
+    es_client = ElasticDumper("192.168.102.129")
     for file in os.listdir():
         if file.endswith(".ann"):
             try:
@@ -63,10 +113,15 @@ def dump(args):
             except Exception as e:
                 print(e)
                 continue
+
+        records = []
         for record in text_meta:
             for record_text in text_data:
                 if record_text[record[0][0]:record[0][1]] == record[1]:
-                    pass
+                    records.append([record[2], record_text, record[0]])
+                    break
+        es_client.write_records(records)
+
 
 
 

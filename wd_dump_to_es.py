@@ -58,7 +58,7 @@ class WikiDataItem():
 
 class ElasticDumper:
 
-    def __init__(self, es_host, wikipedia_index, max_threads=100, download_wiki=False):
+    def __init__(self, es_host, wikipedia_index, max_threads=100,max_threads=100, download_wiki=False):
 
         self.es = elasticsearch.Elasticsearch(es_host)
         self.max_threads = max_threads
