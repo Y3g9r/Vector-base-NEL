@@ -7,6 +7,9 @@ from elasticsearch import helpers
 import concurrent.futures
 import re
 import datetime
+from tqdm import tqdm
+
+import static
 
 
 class ElasticDumper:
@@ -52,7 +55,6 @@ class ElasticDumper:
                 "text": record[1]
             }
         }
-
         return action
 
 
@@ -79,10 +81,8 @@ def read_ann_file(file_path):
                 if line.startswith("T"):
                     pos = []
                     for i, info in enumerate(parts_of_line):
-
-                        if info.isdigit():
+                        if parts_of_line[i].isdigit() and parts_of_line[i+1].isdigit():
                             pos.append(int(parts_of_line[i]))
-
                             pos.append(int(parts_of_line[i+1]))
                         else:
                             continue
@@ -94,19 +94,20 @@ def read_ann_file(file_path):
                     for i, info in enumerate(parts_of_line):
                         if info.startswith("T"):
                             if parts_of_line[i+1].startswith("Wikidata:") and \
-                                    parts_of_line[i+1].lstrip("Wikidata:") != "NULL":
+                                    parts_of_line[i+1].lstrip("Wikidata:") != "NULL" and info in text_meta:
                                 text_meta[info].append(parts_of_line[i+1].lstrip("Wikidata:"))
                                 break
 
-    return text_meta
+    processed_text_meta = {key:val for key,val in text_meta.items() if len(val) == 3 }
+    return processed_text_meta
 
 
 def dump(args):
     os.chdir(args.input)
 
-    es_client = ElasticDumper("192.168.102.129")
+    es_client = ElasticDumper(static.IP)
     passed_files = []
-    for file in os.listdir():
+    for file in tqdm(os.listdir()):
         if file not in passed_files and file.endswith(".ann"):
             try:
                 text_file = file.rstrip(".ann")+".txt"
@@ -117,7 +118,7 @@ def dump(args):
             except Exception as e:
                 print(e)
                 continue
-        if file.endswith(".txt"):
+        if file not in passed_files and file.endswith(".txt"):
             try:
                 ann_file = file.rstrip(".txt") + ".ann"
                 text_data = read_txt_file(file)
@@ -132,10 +133,10 @@ def dump(args):
         for record in text_meta.values():
             for record_text in text_data:
                 if record_text[record[0][0]:record[0][1]] == record[1]:
-                    print(record)
                     records.append([record[2], record_text, record[0]])
                     break
-        es_client.write_records(records)
+        if len(records) != 0:
+            es_client.write_records(records)
 
 
 
