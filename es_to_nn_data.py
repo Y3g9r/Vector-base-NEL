@@ -1,6 +1,7 @@
 import csv
 import elasticsearch
 import static
+from tqdm import tqdm
 
 class Elastic:
 
@@ -11,6 +12,8 @@ class Elastic:
         self.index_def = "wikipedia-ru"
         self.text_type = "text"
         self.def_type = "item"
+
+        self.passed_negative_defs = []
 
     def get_nn_data(self) -> list:
         body_text = {
@@ -25,12 +28,21 @@ class Elastic:
         results_text = self.es.search(index=self.index_text, doc_type=self.text_type, body=body_text, size=founded_count)
 
         csv_data = []
-        for result_text in results_text["hits"]["hits"]:
+        for result_text in tqdm(results_text["hits"]["hits"]):
             current_id = result_text["_id"]
             body_def = {
                 "query": {
-                    "match": {
-                        "_id": current_id
+                    "bool": {
+                        "must":[{
+                            "match": {
+                                "_id": current_id
+                            }
+                        }],
+                        "must_not":[{
+                            "match": {
+                                "descriptions.ru": "страница значений"
+                            }
+                        }]
                     }
                 }
             }
@@ -61,7 +73,10 @@ class Elastic:
                     "must_not": [
                     {"match": {
                       "_id": current_id
-                    }}
+                    }},
+                        {"match": {
+                            "descriptions.ru": "страница значений"
+                        }}
                   ]
                 }
             }
@@ -78,13 +93,17 @@ class Elastic:
                     "exists": {
                           "field": "descriptions.ru"
                       }
-                    }]
+                    }],
+                    "must_not": [
+                        {"match": {
+                            "descriptions.ru": "страница значений"
+                        }}
+                    ]
                 }
               },
               "functions": [
                 {
                   "random_score": {
-                      "seed": "1477072619038"
                   }
                 }
               ]
@@ -94,12 +113,15 @@ class Elastic:
 
         result_data = self.es.search(index=self.index_def, doc_type=self.def_type, body=body_def_negative)
 
-        if result_data["hits"]["total"] == 0:
+        if result_data["hits"]["total"] == 0 or \
+            result_data["hits"]["hits"][0]["_source"]["descriptions"]["ru"] in self.passed_negative_defs:
             result_data = self.es.search(index=self.index_def, doc_type=self.def_type, body=body_random_doc)
-            while result_data["hits"]["hits"][0]["_id"] == current_id:
+            while result_data["hits"]["hits"][0]["_id"] == current_id or\
+                    result_data["hits"]["hits"][0]["_source"]["descriptions"]["ru"] in self.passed_negative_defs:
                 result_data = self.es.search(index=self.index_def, doc_type=self.def_type, body=body_random_doc)
 
         def_negative = result_data["hits"]["hits"][0]["_source"]["descriptions"]["ru"]
+        self.passed_negative_defs.append(def_negative)
 
         return def_negative
 

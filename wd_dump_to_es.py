@@ -206,7 +206,7 @@ def dump(args):
     start_line = args.start_line
     end_line = args.end_line
     tasks = []
-    addr = "192.168.102.129"
+    addr = "192.168.2.67"
     dumper = ElasticDumper(addr, "wikipedia")
     with gzip.open(args.input, "r") as bz2_file:
         for line in tqdm(bz2_file):
