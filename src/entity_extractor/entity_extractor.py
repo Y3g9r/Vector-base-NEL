@@ -1,23 +1,20 @@
 from razdel import sentenize
 from natasha import Segmenter, NewsEmbedding, NewsNERTagger, Doc
 
-#self.text = "Алексей А.В. из Артёмовска и Пётр М.Е из Магадана пошли к реке. Никто не видел Артёма.. . Но все знали, что он рядом!"
-
-
 class EntityExtractor():
-    def __init__(text: str):
+    def __init__(self, text: str):
         self.text = text
         self.sentences = list(sentenize(text))
-        self.sentences = [list(sentence)[2] for sentence in sentences]
+        self.sentences = [list(sentence)[2] for sentence in self.sentences]
 
         self.segmenter = Segmenter()
         self.emb = NewsEmbedding()
-        self.ner_tagger = NewsNERTagger(emb)
+        self.ner_tagger = NewsNERTagger(self.emb)
 
-        self.entity_positions = {}
-        self.entity_text = {}
+        self.entity_positions = []
+        self.entity_text = []
 
-    def _apply_tag_ner(self, sentece: str):
+    def _apply_tag_ner(self, sentence: str):
         doc = Doc(sentence)
         doc.segment(self.segmenter)
         doc.tag_ner(self.ner_tagger)
@@ -25,24 +22,28 @@ class EntityExtractor():
         return doc
 
     def get_entitys_positions(self):
-        for sentence in self.sentences:
+        for i, sentence in enumerate(self.sentences):
             doc = self._apply_tag_ner(sentence)
 
-            self.entity_positions[sentences.index[sentence]] = []
+            self.entity_positions.append([])
             for span in doc.spans:
-                entity_positions.append([span.start, span.stop])
+                self.entity_positions[i].append([span.start, span.stop])
 
-        return entity_positions
+        return self.entity_positions
 
     def get_entitys_text(self):
-        for sentence in self.sentences:
+        for i, sentence in enumerate(self.sentences):
             doc = self._apply_tag_ner(sentence)
 
-            self.entity_text[sentences.index[sentence]] = []
+            self.entity_text.append([])
             for span in doc.spans:
-                entity_text.append(span.text)
+                self.entity_text[i].append(span.text)
 
-        return entity_text
+        return self.entity_text
 
 
-print(doc.spans[0])
+text = "Алексей А.В. из Артёмовска и Пётр М.Е из Магадана пошли к реке. Никто не видел Артёма.. . Но все знали, что он рядом!"
+entity_extractor = EntityExtractor(text)
+
+print(entity_extractor.get_entitys_positions())
+print(entity_extractor.get_entitys_text())
