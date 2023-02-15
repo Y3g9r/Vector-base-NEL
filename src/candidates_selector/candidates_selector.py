@@ -1,5 +1,6 @@
 import pymorphy2
-from entity_extractor.entity_extractor import EntityExtractor
+from entity_extractor import EntityExtractor
+from static.static import IP
 
 
 class CandidatesSelector():
@@ -34,6 +35,12 @@ class CandidatesSelector():
             for entity in sentence_entitys:
                 sentence_candidates = self._get_candidates_from_elastic(\
                     self._entity_normalizer(entity))
+                print(sentence_candidates)
                 # for i, clean_entity in enumerate(sentence_candidates):
                 #     sentence_candidates[
 
+
+
+sentence_entitys_list = [["Артёма",'Организация объединённых наций'],['МВД']]
+candidate_selector = CandidatesSelector(IP)
+candidate_selector.get_candidates(sentence_entitys_list)
