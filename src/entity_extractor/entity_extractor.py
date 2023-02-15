@@ -1,5 +1,16 @@
-from deeppavlov import evaluate_model
+import os
+os.environ['CUDA_VISIBLE_DEVICES']='cpu'
 
-model = build_model('ner_collection3_bert', download=True)
+from deeppavlov import build_model
+from razdel import sentenize
 
-ner_model(['Президент США Джо Байден из страха перенес подрыв "Северных потоков" с июня на сентябрь 2022 года, при этом многие участники этой операции считали ее безумной, заявил в интервью Berliner Zeitung известный американский журналист-расследователь Сеймур Херш'])
+text = "Алексей А.В. и Пётр М.Е пошли к реке. Никто не видел Артёма.. . Но все знали, что он рядом!"
+
+sentences = list(sentenize(text))
+sentences = [list(sentence)[2] for sentence in sentences]
+
+ner_model = build_model('ner_collection3_bert', download=False)
+
+sentences_count = len(sentences)
+sentences_entities = ner_model(sentences)
+
