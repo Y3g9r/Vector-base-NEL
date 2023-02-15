@@ -4,8 +4,7 @@ from natasha import Segmenter, NewsEmbedding, NewsNERTagger, Doc
 class EntityExtractor():
     def __init__(self, text: str):
         self.text = text
-        self.sentences = list(sentenize(text))
-        self.sentences = [list(sentence)[2] for sentence in self.sentences]
+        self.sentences = self.get_sentences()
 
         self.segmenter = Segmenter()
         self.emb = NewsEmbedding()
@@ -20,6 +19,17 @@ class EntityExtractor():
         doc.tag_ner(self.ner_tagger)
 
         return doc
+
+    def get_sentences(self):
+        try:
+            sentences = list(sentenize(self.text))
+            sentences = [list(sentence)[2] for sentence in sentences]
+        except Exception as e:
+            print(e)
+            exit(0)
+
+
+        return sentences
 
     def get_entitys_positions(self):
         for i, sentence in enumerate(self.sentences):
@@ -47,3 +57,4 @@ entity_extractor = EntityExtractor(text)
 
 print(entity_extractor.get_entitys_positions())
 print(entity_extractor.get_entitys_text())
+print(entity_extractor.get_sentences())
