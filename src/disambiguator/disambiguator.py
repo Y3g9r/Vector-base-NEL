@@ -1,3 +1,4 @@
+import torch
 import gc
 
 class InputSample():
@@ -115,6 +116,24 @@ class Trainer():
     def predict(self, input_ids, input_mask, segment_ids):
         return self.best_model(input_ids, input_mask, segment_ids)
 
+    def save_model(self, path: str):
+        try:
+            torch.save(self.best_model, path)
+        except Exception as e:
+            print(f"Не удалось сохранить модель. Ошибка {e}")
+            exit(1)
+
+        return True
+
+    def load_model(self, path: str):
+        try:
+            self.best_model.load_state_dict(torch.load(path))
+        except Exception as e:
+            print(f"Не удалось загрузить модель. Ошибка {e}")
+            exit(1)
+
+        return True
+
     def fit(self, train_dataset, valid_dataset):
 
         device = torch.device(self.device)
@@ -133,8 +152,7 @@ class Trainer():
 
         best_val_loss = float('inf')  # Лучшее значение функции потерь на валидационной выборке
 
-        best_ep = 0  # Эпоха, на которой достигалось лучшее
-        # значение функции потерь на валидационной выборке
+        best_ep = 0  # Эпоха, на которой достигалось лучшее значение функции потерь на валидационной выборке
 
         for epoch in range(self.num_epochs):
             start = dt.datetime.now()
@@ -219,3 +237,19 @@ class Trainer():
             print()
 
             print(f"report: \n", classification_report(y_test, Y_pred))
+
+
+
+max_len = train_df.text.str.len().max()
+train_feautures, valid_feautures = text_to_train_test_feautures(train_df['text'],
+                                                    train_df['target'],max_len)
+
+train_dataset = DisasterDataset(train_feautures)
+valid_dataset = DisasterDataset(valid_feautures)
+
+
+
+trainer = Trainer(num_epochs=40,batch_size=8,loss_fn=nn.CrossEntropyLoss()
+,model=NerualNet(),device='cuda:0')
+
+trainer.fit(train_dataset=train_dataset,valid_dataset=valid_dataset)
