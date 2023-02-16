@@ -3,12 +3,14 @@ import torch.nn as nn
 from torch.utils.data import DataLoader,Dataset
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from transformers import BertTokenizer, BertModel
-import gc
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import matplotlib.pyplot as plt
+
+import datetime as dt
+import gc
 
 class DisambiguationDataset(Dataset):
     def __init__(self, samples,labels):
@@ -38,11 +40,11 @@ class NerualNet(nn.Module):
         for layer in self.bert.encoder.layer[:11]:
             for param in layer.parameters():
                 param.requires_grad = False
-        self.dropouts = nn.ModuleList([
-            nn.Dropout(0.5) for _ in range(5)
-        ])
-        self.fc = nn.Linear(hidden_size, num_class)
-        self.sigm = nn.Sigmoid()
+
+        self.text_pooling= nn.MaxPool1d(3, stride=2)
+        self.def_pooling = nn.MaxPool1d(3, stride=2)
+
+        self.cos = torch.nn.CosineSimilarity()
 
     def forward(self, input_ids, input_mask, segment_ids):
         bert_output = self.bert(input_ids, token_type_ids=segment_ids, attention_mask=input_mask)
@@ -254,8 +256,6 @@ train_X, test_X, train_Y, test_Y = train_test_split(data_X, data_Y, test_size = 
 
 train_dataset = DisambiguationDataset(train_X, train_Y)
 test_dataset = DisambiguationDataset(test_X, test_Y)
-
-
 
 # trainer = Trainer(num_epochs=40, batch_size=8, loss_fn=nn.BCELoss(), model=NerualNet(), device='cuda:0')
 #
