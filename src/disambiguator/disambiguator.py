@@ -11,21 +11,22 @@ from sklearn.metrics import classification_report
 import matplotlib.pyplot as plt
 
 class DisambiguationDataset(Dataset):
-    def __init__(self, data):
-        self.samples = data
+    def __init__(self, samples,labels):
+        self.samples = samples
+        self.labels = labels
         self.len = len(self.samples)
 
     def __len__(self):
         return self.len
 
     def __getitem__(self, index):
-        items = {"text_input_ids": torch.tensor(self.samples[index].text_input_ids),
-                 "text_input_mask": torch.tensor(self.samples[index].text_input_mask),
-                 "text_segment_ids": torch.tensor(self.samples[index].text_segment_ids),
-                 "def_input_ids": torch.tensor(self.samples[index].def_input_ids),
-                 "def_input_mask": torch.tensor(self.samples[index].def_input_mask),
-                 "def_segment_ids": torch.tensor(self.samples[index].def_segment_ids),
-                 "label": torch.tensor(self.samples[index].label)}
+        items = {"text_input_ids": torch.tensor(self.samples[index][0]),
+                 "text_input_mask": torch.tensor(self.samples[index][1]),
+                 "text_segment_ids": torch.tensor(self.samples[index][2]),
+                 "def_input_ids": torch.tensor(self.samples[index][3]),
+                 "def_input_mask": torch.tensor(self.samples[index][4]),
+                 "def_segment_ids": torch.tensor(self.samples[index][5]),
+                 "label": torch.tensor(self.labels[index])}
         return items
 
 
@@ -251,9 +252,11 @@ data_X, data_Y = data_preparation(df.text,
 
 train_X, test_X, train_Y, test_Y = train_test_split(data_X, data_Y, test_size = 0.2, random_state=42)
 
-# train_dataset = DisambiguationDataset(train_feautures)
-# valid_dataset = DisambiguationDataset(valid_feautures)
-#
+train_dataset = DisambiguationDataset(train_X, train_Y)
+test_dataset = DisambiguationDataset(test_X, test_Y)
+
+
+
 # trainer = Trainer(num_epochs=40, batch_size=8, loss_fn=nn.BCELoss(), model=NerualNet(), device='cuda:0')
 #
 # trainer.fit(train_dataset=train_dataset,valid_dataset=valid_dataset)
