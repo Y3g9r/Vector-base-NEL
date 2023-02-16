@@ -10,16 +10,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import matplotlib.pyplot as plt
 
-class InputSample():
-    def __init__(self, choices_features, label):
-        input_ids, input_mask, segment_ids = choices_features
-        self.input_ids = input_ids
-        self.input_mask = input_mask
-        self.segment_ids = segment_ids
-        self.label = label
-
 class DisambiguationDataset(Dataset):
-    def __init__(self, data, pass_labels=True):
+    def __init__(self, data):
         self.samples = data
         self.len = len(self.samples)
 
@@ -27,9 +19,12 @@ class DisambiguationDataset(Dataset):
         return self.len
 
     def __getitem__(self, index):
-        items = {"input_ids": torch.tensor(self.samples[index].input_ids),
-                 "input_mask": torch.tensor(self.samples[index].input_mask),
-                 "segment_ids": torch.tensor(self.samples[index].segment_ids),
+        items = {"text_input_ids": torch.tensor(self.samples[index].text_input_ids),
+                 "text_input_mask": torch.tensor(self.samples[index].text_input_mask),
+                 "text_segment_ids": torch.tensor(self.samples[index].text_segment_ids),
+                 "def_input_ids": torch.tensor(self.samples[index].def_input_ids),
+                 "def_input_mask": torch.tensor(self.samples[index].def_input_mask),
+                 "def_segment_ids": torch.tensor(self.samples[index].def_segment_ids),
                  "label": torch.tensor(self.samples[index].label)}
         return items
 
