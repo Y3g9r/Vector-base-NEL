@@ -1,5 +1,13 @@
 import torch
+from torch.utils.data import DataLoader,Dataset
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
+from transformers import BertTokenizer, BertModel
 import gc
+
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+import matplotlib.pyplot as plt
 
 class InputSample():
     def __init__(self, choices_features, label):
@@ -9,52 +17,7 @@ class InputSample():
         self.segment_ids = segment_ids
         self.label = label
 
-
-def text_to_train_test_feautures(examples, labels, max_len):
-    feautures_X = []
-    feautures_Y = []
-    feautures_train = []
-    feautures_test = []
-
-    for i, example in enumerate(examples):
-        text = tokenizer.tokenize(example)
-
-        tokens = ["[CLS]"] + text + ["[SEP]"]
-        segment_ids = [0] * (len(text) + 2)
-        input_ids = tokenizer.convert_tokens_to_ids(tokens)
-        input_mask = [1] * len(input_ids)
-
-        padding_length = max_len - len(input_ids)
-        input_ids += ([0] * padding_length)
-        input_mask += ([0] * padding_length)
-        segment_ids += ([0] * padding_length)
-
-        feautures_X.append([input_ids, input_mask, segment_ids])
-        feautures_Y.append(labels[i])
-
-    skf = StratifiedKFold(n_splits=2)
-    for train_index, test_index in skf.split(feautures_X, feautures_Y):
-        X_train, X_test = np.array(feautures_X)[train_index.astype(int)], np.array(feautures_X)[test_index.astype(int)]
-        y_train, y_test = np.array(feautures_Y)[train_index.astype(int)], np.array(feautures_Y)[test_index.astype(int)]
-
-    for train_sample_X, train_sample_Y in zip(X_train, y_train):
-        feautures_train.append(InputSample(
-            choices_features=(train_sample_X[0], train_sample_X[1],
-                              train_sample_X[2]),
-            label=train_sample_Y
-        ))
-
-    for test_sample_X, test_sample_Y in zip(X_train, y_train):
-        feautures_test.append(InputSample(
-            choices_features=(test_sample_X[0], test_sample_X[1],
-                              test_sample_X[2]),
-            label=test_sample_Y
-        ))
-
-    return feautures_train, feautures_test
-
-
-class DisasterDataset(Dataset):
+class DisambiguationDataset(Dataset):
     def __init__(self, data, pass_labels=True):
         self.samples = data
         self.len = len(self.samples)
@@ -159,7 +122,7 @@ class Trainer():
             mean_loss = 0
             batch_n = 0
             for batch in train_loader:
-                y_truth = batch["label"].long().to(device)
+                y_truth = batch["label"].float().to(device)
                 input_ids = batch["input_ids"].to(device)
                 input_mask = batch["input_mask"].to(device)
                 segment_ids = batch["segment_ids"].to(device)
@@ -194,7 +157,7 @@ class Trainer():
                 input_ids = batch["input_ids"].to(device)
                 input_mask = batch["input_mask"].to(device)
                 segment_ids = batch["segment_ids"].to(device)
-                target = batch["label"].long().to(device)
+                target = batch["label"].float().to(device)
 
                 predicted_values = NerualNet(input_ids, input_mask, segment_ids).float()
                 loss = self.loss_fn(predicted_values, target)
@@ -238,18 +201,65 @@ class Trainer():
 
             print(f"report: \n", classification_report(y_test, Y_pred))
 
+def data_preparation(texts, definitions, labels, tokenizer, max_len):
+    tokenizer = tokenizer
+    feautures_X, feautures_Y = [], []
+
+    for i, (text, definition) in enumerate(zip(texts,definitions)):
+        text = tokenizer.tokenize(text)
+
+        tokens = ["[CLS]"] + text + ["[SEP]"]
+        text_segment_ids = [0] * (len(text) + 2)
+        text_input_ids = tokenizer.convert_tokens_to_ids(tokens)
+        text_input_mask = [1] * len(text_input_ids)
+
+        padding_length = max_len - len(text_input_ids)
+        text_input_ids += ([0] * padding_length)
+        text_input_mask += ([0] * padding_length)
+        text_segment_ids += ([0] * padding_length)
+
+        definition = tokenizer.tokenize(definition)
+
+        tokens = ["[CLS]"] + definition + ["[SEP]"]
+        def_segment_ids = [0] * (len(definition) + 2)
+        def_input_ids = tokenizer.convert_tokens_to_ids(tokens)
+        def_input_mask = [1] * len(def_input_ids)
+
+        padding_length = max_len - len(def_input_ids)
+        def_input_ids += ([0] * padding_length)
+        def_input_mask += ([0] * padding_length)
+        def_segment_ids += ([0] * padding_length)
+
+        feautures_X.append([text_input_ids, text_input_mask, text_segment_ids,
+                            def_input_ids, def_input_mask, def_segment_ids])
+        feautures_Y.append(labels[i])
+
+    return feautures_X, feautures_Y
 
 
-max_len = train_df.text.str.len().max()
-train_feautures, valid_feautures = text_to_train_test_feautures(train_df['text'],
-                                                    train_df['target'],max_len)
 
-train_dataset = DisasterDataset(train_feautures)
-valid_dataset = DisasterDataset(valid_feautures)
+df = pd.read_csv('../../nn_data.csv')
 
+max_len_text = df.text.str.len().max()
+max_len_def = df.defenition.str.len().max()
 
+max_len = max_len_def
+if max_len_text > max_len_def:
+    max_len = max_len_text
 
-trainer = Trainer(num_epochs=40,batch_size=8,loss_fn=nn.CrossEntropyLoss()
-,model=NerualNet(),device='cuda:0')
+data_X, data_Y = data_preparation(df.text, df.defenition, df.label, max_len)
 
-trainer.fit(train_dataset=train_dataset,valid_dataset=valid_dataset)
+train_X, train_Y, test_X, test_Y = train_test_split(data_X, data_Y, test_size = 0.2, random_state=42)
+
+# train_feautures, valid_feautures = text_to_train_test_feautures(train_df['text'],
+#                                                                 train_df['target'],
+#                                                                 BertTokenizer.from_pretrained('bert-base-uncased',
+#                                                                                               do_lower_case=True),
+#                                                                 max_len)
+#
+# train_dataset = DisambiguationDataset(train_feautures)
+# valid_dataset = DisambiguationDataset(valid_feautures)
+#
+# trainer = Trainer(num_epochs=40, batch_size=8, loss_fn=nn.BCELoss(), model=NerualNet(), device='cuda:0')
+#
+# trainer.fit(train_dataset=train_dataset,valid_dataset=valid_dataset)

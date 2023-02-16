@@ -131,8 +131,7 @@ class Elastic:
 es = Elastic(IP)
 csv_data = es.get_nn_data()
 
-header = ["text_positive", "position_positive", "definition_positive",
-          "positive_label", "definition_negative", "negative_label"]
+header = ["text", "position", "definition", "label"]
 
 with open('nn_data.csv', 'w', encoding='UTF8') as f:
     writer = csv.writer(f)
