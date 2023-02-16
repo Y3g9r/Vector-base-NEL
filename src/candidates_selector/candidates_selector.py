@@ -13,8 +13,11 @@ class CandidatesSelector():
         self.index = "wikipedia-ru"
         self.type = "item"
 
-    def _entity_normalizer(self, entity: str):
-        return self._morph.parse(entity)[0].normal_form
+    def _entity_normalizer(self, entitys_list: list):
+        normalized_entitys_list = []
+        for entity in entitys_list:
+            normalized_entitys_list.append(self._morph.parse(entity)[0].normal_form)
+        return normalized_entitys_list
 
     def _get_candidates_from_elastic(self, entity: str):
         body = {
@@ -37,6 +40,7 @@ class CandidatesSelector():
                 sentence_candidates_raw = self._get_candidates_from_elastic(\
                     self._entity_normalizer(entity))
                 for sentence in sentence_candidates_raw:
+                    sentence_candidates.append()
 
 
 
