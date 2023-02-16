@@ -1,11 +1,11 @@
 import pymorphy2
-from entity_extractor import EntityExtractor
 from static.static import IP
-
+import elasticsearch
 
 class CandidatesSelector():
 
     def __init__(self, es_host, candidates_limit: int = 5):
+        print(IP)
         self._morph = pymorphy2.MorphAnalyzer(lang='ru')
         self.candidates_limit = candidates_limit
         self.es = elasticsearch.Elasticsearch(es_host)
@@ -14,7 +14,7 @@ class CandidatesSelector():
         self.type = "item"
 
     def _entity_normalizer(self, entity: str):
-        return _morph.parse(entity)[0].normal_form
+        return self._morph.parse(entity)[0].normal_form
 
     def _get_candidates_from_elastic(self, entity: str):
         body = {
@@ -28,16 +28,15 @@ class CandidatesSelector():
         return self.es.search(index=self.index, doc_type=self.type, body=body, size = self.candidates_limit)
 
 
-    def get_candidates(self, sentence_entitys_list: list):
+    def get_candidates(self, sentences_entitys_list: list):
+        sentence_candidates_raw = []
         sentence_candidates = []
 
         for sentence_entitys in sentences_entitys_list:
             for entity in sentence_entitys:
-                sentence_candidates = self._get_candidates_from_elastic(\
+                sentence_candidates_raw = self._get_candidates_from_elastic(\
                     self._entity_normalizer(entity))
-                print(sentence_candidates)
-                # for i, clean_entity in enumerate(sentence_candidates):
-                #     sentence_candidates[
+                for sentence in sentence_candidates_raw:
 
 
 
