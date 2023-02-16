@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader,Dataset
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
 from transformers import BertTokenizer, BertModel
@@ -205,7 +206,7 @@ def data_preparation(texts, definitions, labels, tokenizer, max_len):
     tokenizer = tokenizer
     feautures_X, feautures_Y = [], []
 
-    for i, (text, definition) in enumerate(zip(texts,definitions)):
+    for i, (text, definition) in enumerate(zip(texts, definitions)):
         text = tokenizer.tokenize(text)
 
         tokens = ["[CLS]"] + text + ["[SEP]"]
@@ -241,22 +242,20 @@ def data_preparation(texts, definitions, labels, tokenizer, max_len):
 df = pd.read_csv('../../nn_data.csv')
 
 max_len_text = df.text.str.len().max()
-max_len_def = df.defenition.str.len().max()
+max_len_def = df.definition.str.len().max()
 
 max_len = max_len_def
 if max_len_text > max_len_def:
     max_len = max_len_text
 
-data_X, data_Y = data_preparation(df.text, df.defenition, df.label, max_len)
+data_X, data_Y = data_preparation(df.text,
+                                  df.definition,
+                                  df.label,
+                                  BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True),
+                                  max_len)
 
-train_X, train_Y, test_X, test_Y = train_test_split(data_X, data_Y, test_size = 0.2, random_state=42)
+train_X, test_X, train_Y, test_Y = train_test_split(data_X, data_Y, test_size = 0.2, random_state=42)
 
-# train_feautures, valid_feautures = text_to_train_test_feautures(train_df['text'],
-#                                                                 train_df['target'],
-#                                                                 BertTokenizer.from_pretrained('bert-base-uncased',
-#                                                                                               do_lower_case=True),
-#                                                                 max_len)
-#
 # train_dataset = DisambiguationDataset(train_feautures)
 # valid_dataset = DisambiguationDataset(valid_feautures)
 #
