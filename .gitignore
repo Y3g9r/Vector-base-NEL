@@ -5,3 +5,4 @@ wikidata*
 train
 nn_data.csv
 pyHDT
+venv
