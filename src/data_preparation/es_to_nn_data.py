@@ -1,6 +1,6 @@
 import csv
 import elasticsearch
-import static
+from static.static import IP
 from tqdm import tqdm
 
 class Elastic:
@@ -52,7 +52,9 @@ class Elastic:
                 record = es._get_negative_record(temp_data["labels"]["ru"], current_id)
                 if "ru" in temp_data["descriptions"]:
                     csv_data.append([result_text["_source"]["text"], result_text["_source"]["position"],
-                                     temp_data["descriptions"]["ru"], 1, record, 0])
+                                     temp_data["descriptions"]["ru"], 1])
+                    csv_data.append([result_text["_source"]["text"], result_text["_source"]["position"],
+                                     record, 0])
 
         return csv_data
 
@@ -75,7 +77,7 @@ class Elastic:
                       "_id": current_id
                     }},
                         {"match": {
-                            "descriptions.ru": "страница значений"
+                            "descriptions.ru": "страница значений астероид"
                         }}
                   ]
                 }
@@ -96,7 +98,7 @@ class Elastic:
                     }],
                     "must_not": [
                         {"match": {
-                            "descriptions.ru": "страница значений"
+                            "descriptions.ru": "страница значений астероид"
                         }}
                     ]
                 }
@@ -126,7 +128,7 @@ class Elastic:
         return def_negative
 
 
-es = Elastic(static.IP)
+es = Elastic(IP)
 csv_data = es.get_nn_data()
 
 header = ["text_positive", "position_positive", "definition_positive",
