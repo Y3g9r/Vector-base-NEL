@@ -10,6 +10,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import matplotlib.pyplot as plt
 
+import ast
 import datetime as dt
 import gc
 
@@ -36,10 +37,11 @@ class DisambiguationDataset(Dataset):
 
 
 class NerualNet(nn.Module):
-    def __init__(self, hidden_size=768, max_seq_len=388, device = 'cpu'):
+    def __init__(self, hidden_size=768, max_seq_len=388, device='cpu'):
         self.device = device
         super(NerualNet, self).__init__()
-        self.bert = BertModel.from_pretrained('sberbank-ai/sbert_large_mt_nlu_ru')
+        self.bert = BertModel.from_pretrained('sberbank-ai/sbert_large_mt_nlu_ru', output_hidden_states=True,
+                                              return_dict=False)
         for layer in self.bert.encoder.layer[:11]:
             for param in layer.parameters():
                 param.requires_grad = False
@@ -57,13 +59,14 @@ class NerualNet(nn.Module):
         embd_batch = torch.tensor([[[], []]]).to(self.device)
         for i in range(len(text_input_ids)):
             # получаем эмбединги ключевого слова из примера употребления
-            examples_token_key_word_position = self.token_detection(text_offset_mapping[i][0], text_pos[i])
+            examples_token_key_word_position = self.token_detection(text_offset_mapping[i], text_pos[i][0])
             example_token_vec = self.get_vector(text_input_ids[i], text_segment_ids[i], text_input_mask[i])
             example_embeddings = self.vector_recognition(example_token_vec, examples_token_key_word_position)
 
             # получаем эмбединг определения
             def_embedding = self.get_defenition_embedding(def_input_ids[i], def_segment_ids[i],
                                                           def_input_mask[i])
+            print(example_embeddings.size())
             # объединяем два вектора в 1 и добавляем в общий массив (получаем тензор 2x768)
             embd_sample = torch.stack((example_embeddings, def_embedding))
             if not first_pass:
@@ -92,9 +95,10 @@ class NerualNet(nn.Module):
         :param def_input_mask:
         :return: bert pooler output vector
         """
+
         with torch.no_grad():
-            output = self.bert(input_ids=def_input_ids, token_type_ids=def_segment_ids,
-                                attention_mask=def_input_mask)
+            output = self.bert(input_ids=def_input_ids.unsqueeze(0), token_type_ids=def_segment_ids.unsqueeze(0),
+                               attention_mask=def_input_mask.unsqueeze(0))
         hidden_states = output[1]
         return hidden_states
 
@@ -134,19 +138,11 @@ class NerualNet(nn.Module):
         :return:
         """
         with torch.no_grad():
-            outputs = self.model(input_ids=input_ids_samp, token_type_ids=token_type_ids_samp,
-                                 attention_mask=attention_mask_samp)
+            outputs = self.bert(input_ids=input_ids_samp.unsqueeze(0), token_type_ids=token_type_ids_samp.unsqueeze(0),
+                                attention_mask=attention_mask_samp.unsqueeze(0))
             hidden_states = outputs[2]
 
-        token_dim = torch.stack(hidden_states, dim=0)
-        token_dim = torch.squeeze(token_dim, dim=1)
-        token_dim = token_dim.permute(1, 0, 2)
-        token_vecs_cat = []
-        for token in token_dim:
-            cat_vec = torch.sum(token[-4:], dim=0)
-            token_vecs_cat.append(cat_vec)
-
-        return token_vecs_cat
+        return hidden_states
 
     def vector_recognition(self, tokens_embeddings_ex, tokens_key_word_position_ex):
         """
@@ -159,8 +155,8 @@ class NerualNet(nn.Module):
             embeddings_data = torch.tensor(
                 self.__get_avarage_embedding(tokens_embeddings_ex, tokens_key_word_position_ex))
         else:
-            # print(tokens_embeddings_ex)
-            # print(tokens_key_word_position_ex)
+
+            print(tokens_key_word_position_ex)
             embeddings_data = torch.tensor(tokens_embeddings_ex[tokens_key_word_position_ex[0]])
         return embeddings_data
 
@@ -220,9 +216,7 @@ class Trainer():
         return True
 
     def fit(self, train_dataset, valid_dataset):
-
         device = torch.device(self.device)
-        print(device)
         NerualNet = self.start_model
         NerualNet.to(device)
 
@@ -245,18 +239,25 @@ class Trainer():
             batch_n = 0
             for batch in train_loader:
                 y_truth = batch["label"].float().to(device)
-                input_ids = batch["input_ids"].to(device)
-                input_mask = batch["input_mask"].to(device)
-                segment_ids = batch["segment_ids"].to(device)
+                text_input_ids = batch["text_input_ids"].to(device)
+                text_input_mask = batch["text_input_mask"].to(device)
+                text_segment_ids = batch["text_segment_ids"].to(device)
+                text_offset_mapping = batch["text_offset_mapping"]
+                text_pos = batch["text_pos"]
+                def_input_ids = batch["def_input_ids"].to(device)
+                def_input_mask = batch["def_input_mask"].to(device)
+                def_segment_ids = batch["def_segment_ids"].to(device)
+                del batch
+                y_pred = NerualNet(text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
+                                   text_pos, def_input_ids, def_input_mask, def_segment_ids).float()
 
-                y_pred = NerualNet(input_ids, input_mask, segment_ids).float()
                 loss = self.loss_fn(y_pred, y_truth)
 
                 self.optimizer.zero_grad()
                 loss.backward()
                 self.optimizer.step()
 
-                del batch
+                # del batch
                 torch.cuda.empty_cache()
                 gc.collect()
 
@@ -276,12 +277,18 @@ class Trainer():
                         if batch_n >= self.max_batches_per_epoch:
                             break
 
-                input_ids = batch["input_ids"].to(device)
-                input_mask = batch["input_mask"].to(device)
-                segment_ids = batch["segment_ids"].to(device)
                 target = batch["label"].float().to(device)
+                text_input_ids = batch["text_input_ids"].to(device)
+                text_input_mask = batch["text_input_mask"].to(device)
+                text_segment_ids = batch["text_segment_ids"].to(device)
+                text_offset_mapping = batch["text_offset_mapping"]
+                text_pos = batch["text_pos"]
+                def_input_ids = batch["def_input_ids"].to(device)
+                def_input_mask = batch["def_input_mask"].to(device)
+                def_segment_ids = batch["def_segment_ids"].to(device)
 
-                predicted_values = NerualNet(input_ids, input_mask, segment_ids).float()
+                predicted_values = NerualNet(text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
+                                             text_pos, def_input_ids, def_input_mask, def_segment_ids).float()
                 loss = self.loss_fn(predicted_values, target)
 
                 del batch
@@ -328,7 +335,7 @@ def data_preparation(texts, definitions, position, labels, tokenizer, max_len):
     feautures_X, feautures_Y = [], []
 
     for i, (text, definition) in enumerate(zip(texts, definitions)):
-        text = tokenizer(text, return_offsets_mapping=True,max_length=max_len,truncation=True)
+        text = tokenizer(text, return_offsets_mapping=True,max_length=max_len,truncation=True,padding='max_length')
 
         text_input_ids = text["input_ids"]
         text_input_mask = text["attention_mask"]
@@ -336,7 +343,7 @@ def data_preparation(texts, definitions, position, labels, tokenizer, max_len):
         text_offset_mapping = text["offset_mapping"]
         text_pos = [position[i]]
 
-        definition = tokenizer(definition, return_offsets_mapping=True,max_length=max_len,truncation=True)
+        definition = tokenizer(definition, return_offsets_mapping=True,max_length=max_len,padding='max_length',truncation=True)
 
         def_input_ids = definition["input_ids"]
         def_input_mask = definition["attention_mask"]
@@ -348,10 +355,12 @@ def data_preparation(texts, definitions, position, labels, tokenizer, max_len):
 
     return feautures_X, feautures_Y
 
+torch.cuda.empty_cache()
+gc.collect()
 
-print(torch.cuda.is_available())
 
 df = pd.read_csv('../../nn_data.csv')
+df.position = df.position.apply(lambda x: ast.literal_eval(x))
 
 max_len_text = df.text.str.len().max()
 max_len_def = df.definition.str.len().max()
@@ -374,9 +383,9 @@ train_dataset = DisambiguationDataset(train_X, train_Y)
 test_dataset = DisambiguationDataset(test_X, test_Y)
 
 trainer = Trainer(num_epochs=40,
-                  batch_size=8,
+                  batch_size=4,
                   loss_fn=nn.BCELoss(),
-                  model=NerualNet(max_seq_len=max_len, device='cuda:0'),
-                  device='cuda:0')
+                  model=NerualNet(max_seq_len=max_len, device='cpu'),
+                  device='cpu')
 
 trainer.fit(train_dataset=train_dataset, valid_dataset=test_dataset)
