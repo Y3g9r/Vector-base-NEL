@@ -25,9 +25,10 @@ class DisambiguationDataset(Dataset):
         items = {"text_input_ids": torch.tensor(self.samples[index][0]),
                  "text_input_mask": torch.tensor(self.samples[index][1]),
                  "text_segment_ids": torch.tensor(self.samples[index][2]),
-                 "def_input_ids": torch.tensor(self.samples[index][3]),
-                 "def_input_mask": torch.tensor(self.samples[index][4]),
-                 "def_segment_ids": torch.tensor(self.samples[index][5]),
+                 "text_pos": torch.tensor(self.samples[index][3]),
+                 "def_input_ids": torch.tensor(self.samples[index][4]),
+                 "def_input_mask": torch.tensor(self.samples[index][5]),
+                 "def_segment_ids": torch.tensor(self.samples[index][6]),
                  "label": torch.tensor(self.labels[index])}
         return items
 
@@ -46,29 +47,56 @@ class NerualNet(nn.Module):
 
         self.cos = torch.nn.CosineSimilarity()
 
-    def forward(self, input_ids, input_mask, segment_ids):
-        bert_output = self.bert(input_ids, token_type_ids=segment_ids, attention_mask=input_mask)
-        for i, dropout in enumerate(self.dropouts):
-            if i == 0:
-                h = self.fc(dropout(bert_output[1].squeeze()))
-            else:
-                h += self.fc(dropout(bert_output[1].squeeze()))
-        return h / len(self.dropouts)
+    def forward(self, text_input_ids, text_input_mask, text_segment_ids,
+                text_pos, def_input_ids, def_input_mask, def_segment_ids):
 
-    def get_defenition_embedding(self, input_ids_def, token_type_ids_def, attention_mask_def):
-        # with torch.no_grad():
-        #     _, pooled_output, _ = self.model(tokens_tensor, segments_tensors)
-        #     return pooled_output[0]
+        embd_batch = torch.tensor([[[], []]]).to(device)
+        for i in range(len(input_ids_def)):
+            # получаем эмбединги ключевого слова из примера употребления
+            example_token_vec = self.get_vector(text_input_ids[i], text_segment_ids[i], text_input_mask[i])
+            examples_token_key_word_position = self.token_detection(offset_mapping_samp[i][0], samp_position_samp[i])
+            example_embeddings = self.vector_recognition(example_token_vec, examples_token_key_word_position)
+
+            # получаем эмбединг определения
+            def_embedding = self.get_defenition_embedding(def_input_ids[i], def_segment_ids[i],
+                                                          def_input_mask[i])
+            # объединяем два вектора в 1 и добавляем в общий массив (получаем тензор 2x768)
+            embd_sample = torch.stack((example_embeddings, def_embedding)).to(device)
+            if not first_pass:
+                embd_batch = torch.cat((embd_batch, embd_sample.unsqueeze(0)), -1)
+                first_pass = True
+            else:
+                embd_batch = torch.cat((embd_batch, embd_sample.unsqueeze(0)), 0)
+
+
+    def get_defenition_embedding(self, def_input_ids, def_segment_ids, def_input_mask):
         with torch.no_grad():
-            output = self.model(input_ids=input_ids_def, token_type_ids=token_type_ids_def,
-                                attention_mask=attention_mask_def)
+            output = self.bert(input_ids=def_input_ids, token_type_ids=def_segment_ids,
+                                attention_mask=def_input_mask)
             hidden_states = output[2]
-        # from [# layers, # batches, # tokens, # features] to [# tokens, # layers, # features]
+
         token_dim = torch.stack(hidden_states, dim=0)
         token_dim = torch.squeeze(token_dim, dim=1)
         token_dim = token_dim.permute(0, 1, 2)
         cat_vec = torch.cat(((token_dim[-4][0] + token_dim[-3][0] + token_dim[-2][0] + token_dim[-1][0]),), dim=0)
         return cat_vec
+
+    def get_vector(self, input_ids_samp, token_type_ids_samp, attention_mask_samp):
+        # Функция получения вектора ключевого слова
+        with torch.no_grad():
+            outputs = self.model(input_ids=input_ids_samp, token_type_ids=token_type_ids_samp,
+                                 attention_mask=attention_mask_samp)
+            hidden_states = outputs[2]
+
+        token_dim = torch.stack(hidden_states, dim=0)
+        token_dim = torch.squeeze(token_dim, dim=1)
+        token_dim = token_dim.permute(1, 0, 2)
+        token_vecs_cat = []
+        for token in token_dim:
+            cat_vec = torch.sum(token[-4:], dim=0)
+            token_vecs_cat.append(cat_vec)
+
+        return token_vecs_cat
 
     def token_detection(self, token_map, position):
         # Функция определения ключевого слова
@@ -97,24 +125,18 @@ class NerualNet(nn.Module):
 
         return position_of_key_tokens
 
-    def get_vector(self, input_ids_samp, token_type_ids_samp, attention_mask_samp):
-        # Функция получения вектора ключевого слова
-        with torch.no_grad():
-            outputs = self.model(input_ids=input_ids_samp, token_type_ids=token_type_ids_samp,
-                                 attention_mask=attention_mask_samp)
-            hidden_states = outputs[2]
-        # from [# layers, # batches, # tokens, # features] to [# tokens, # layers, # features]
-        token_dim = torch.stack(hidden_states, dim=0)
-        token_dim = torch.squeeze(token_dim, dim=1)
-        token_dim = token_dim.permute(1, 0, 2)
-        token_vecs_cat = []
-        for token in token_dim:
-            cat_vec = torch.sum(token[-4:], dim=0)
-            token_vecs_cat.append(cat_vec)
+    def vector_recognition(self, tokens_embeddings_ex, tokens_key_word_position_ex):
+        # Функция подготовки вектора в зависимости от количества токенов,которым представляется ключевое слово
+        if len(tokens_key_word_position_ex) > 1:
+            embeddings_data = torch.tensor(
+                self.__get_avarage_embedding(tokens_embeddings_ex, tokens_key_word_position_ex))
+        else:
+            # print(tokens_embeddings_ex)
+            # print(tokens_key_word_position_ex)
+            embeddings_data = torch.tensor(tokens_embeddings_ex[tokens_key_word_position_ex[0]])
+        return embeddings_data
 
-        return token_vecs_cat
-
-    def get_avarage_embedding(self, embeddings_list, positions_list):
+    def __get_avarage_embedding(self, embeddings_list, positions_list):
         # Функция получения среднего вектора
         avg_tensor = torch.stack((embeddings_list[positions_list[0]],))
         for i in range(1, len(positions_list)):
@@ -122,17 +144,6 @@ class NerualNet(nn.Module):
 
         average_embedding = torch.mean(avg_tensor, 0)
         return average_embedding
-
-    def vector_recognition(self, tokens_embeddings_ex, tokens_key_word_position_ex):
-        # Функция подготовки вектора в зависимости от количества токенов,которым представляется ключевое слово
-        if len(tokens_key_word_position_ex) > 1:
-            embeddings_data = torch.tensor(
-                self.get_avarage_embedding(tokens_embeddings_ex, tokens_key_word_position_ex))
-        else:
-            # print(tokens_embeddings_ex)
-            # print(tokens_key_word_position_ex)
-            embeddings_data = torch.tensor(tokens_embeddings_ex[tokens_key_word_position_ex[0]])
-        return embeddings_data
 
 
 class Trainer():
