@@ -48,13 +48,13 @@ class NerualNet(nn.Module):
 
         self.cos = torch.nn.CosineSimilarity()
 
-    def forward(self, text_input_ids, text_input_mask, text_segment_ids,
+    def forward(self, text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
                 text_pos, def_input_ids, def_input_mask, def_segment_ids):
 
         embd_batch = torch.tensor([[[], []]]).to(device)
-        for i in range(len(input_ids_def)):
+        for i in range(len(text_input_ids)):
             # получаем эмбединги ключевого слова из примера употребления
-            examples_token_key_word_position = self.token_detection(offset_mapping_samp[i][0], samp_position_samp[i])
+            examples_token_key_word_position = self.token_detection(text_offset_mapping[i][0], text_pos[i])
             example_token_vec = self.get_vector(text_input_ids[i], text_segment_ids[i], text_input_mask[i])
             example_embeddings = self.vector_recognition(example_token_vec, examples_token_key_word_position)
 
@@ -62,7 +62,7 @@ class NerualNet(nn.Module):
             def_embedding = self.get_defenition_embedding(def_input_ids[i], def_segment_ids[i],
                                                           def_input_mask[i])
             # объединяем два вектора в 1 и добавляем в общий массив (получаем тензор 2x768)
-            embd_sample = torch.stack((example_embeddings, def_embedding)).to(device)
+            embd_sample = torch.stack((example_embeddings, def_embedding))
             if not first_pass:
                 embd_batch = torch.cat((embd_batch, embd_sample.unsqueeze(0)), -1)
                 first_pass = True
