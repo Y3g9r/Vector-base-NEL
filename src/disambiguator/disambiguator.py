@@ -48,6 +48,8 @@ class NerualNet(nn.Module):
 
         self.cos = torch.nn.CosineSimilarity()
 
+        self.sigm = torch.nn.Sigmoid()
+
     def forward(self, text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
                 text_pos, def_input_ids, def_input_mask, def_segment_ids):
 
@@ -69,6 +71,17 @@ class NerualNet(nn.Module):
             else:
                 embd_batch = torch.cat((embd_batch, embd_sample.unsqueeze(0)), 0)
 
+        text_emb = embd_batch[:, 0, :]
+        def_emb = embd_batch[:, 1, :]
+
+        text_pool = self.text_pooling(text_emb)
+        def_pool = self.def_pooling(def_emb)
+
+        cos_comp = self.cos(text_pool,def_pool)
+
+        y = self.sigm(cos_comp)
+
+        return y
 
     def get_defenition_embedding(self, def_input_ids, def_segment_ids, def_input_mask):
         """
