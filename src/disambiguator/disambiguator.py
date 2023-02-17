@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
-from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, TensorDataset
-from transformers import BertTokenizer, BertModel
+from torch.utils.data import  Dataset
+from torch.utils.data import DataLoader
+from transformers import BertTokenizerFast, BertModel
+import torch.optim as optim
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
@@ -35,10 +36,10 @@ class DisambiguationDataset(Dataset):
 
 
 class NerualNet(nn.Module):
-    def __init__(self, hidden_size=768, max_seq_len=388):
+    def __init__(self, hidden_size=768, max_seq_len=388, device = 'cpu'):
+        self.device = device
         super(NerualNet, self).__init__()
-
-        self.bert = BertModel.from_pretrained('bert-base-uncased')
+        self.bert = BertModel.from_pretrained('sberbank-ai/sbert_large_mt_nlu_ru')
         for layer in self.bert.encoder.layer[:11]:
             for param in layer.parameters():
                 param.requires_grad = False
@@ -53,7 +54,7 @@ class NerualNet(nn.Module):
     def forward(self, text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
                 text_pos, def_input_ids, def_input_mask, def_segment_ids):
 
-        embd_batch = torch.tensor([[[], []]]).to(device)
+        embd_batch = torch.tensor([[[], []]]).to(self.device)
         for i in range(len(text_input_ids)):
             # получаем эмбединги ключевого слова из примера употребления
             examples_token_key_word_position = self.token_detection(text_offset_mapping[i][0], text_pos[i])
@@ -77,7 +78,7 @@ class NerualNet(nn.Module):
         text_pool = self.text_pooling(text_emb)
         def_pool = self.def_pooling(def_emb)
 
-        cos_comp = self.cos(text_pool,def_pool)
+        cos_comp = self.cos(text_pool, def_pool)
 
         y = self.sigm(cos_comp)
 
@@ -327,31 +328,19 @@ def data_preparation(texts, definitions, position, labels, tokenizer, max_len):
     feautures_X, feautures_Y = [], []
 
     for i, (text, definition) in enumerate(zip(texts, definitions)):
-        text = tokenizer.tokenize(text)
+        text = tokenizer(text, return_offsets_mapping=True,max_length=max_len,truncation=True)
 
-        tokens = ["[CLS]"] + text + ["[SEP]"]
-        text_segment_ids = [0] * (len(text) + 2)
-        text_input_ids = tokenizer.convert_tokens_to_ids(tokens)
-        text_input_mask = [1] * len(text_input_ids)
-
-        padding_length = max_len - len(text_input_ids)
-        text_input_ids += ([0] * padding_length)
-        text_input_mask += ([0] * padding_length)
-        text_segment_ids += ([0] * padding_length)
-        text_offset_mapping = text['offset_mapping']
+        text_input_ids = text["input_ids"]
+        text_input_mask = text["attention_mask"]
+        text_segment_ids = text["token_type_ids"]
+        text_offset_mapping = text["offset_mapping"]
         text_pos = [position[i]]
 
-        definition = tokenizer.tokenize(definition)
+        definition = tokenizer(definition, return_offsets_mapping=True,max_length=max_len,truncation=True)
 
-        tokens = ["[CLS]"] + definition + ["[SEP]"]
-        def_segment_ids = [0] * (len(definition) + 2)
-        def_input_ids = tokenizer.convert_tokens_to_ids(tokens)
-        def_input_mask = [1] * len(def_input_ids)
-
-        padding_length = max_len - len(def_input_ids)
-        def_input_ids += ([0] * padding_length)
-        def_input_mask += ([0] * padding_length)
-        def_segment_ids += ([0] * padding_length)
+        def_input_ids = definition["input_ids"]
+        def_input_mask = definition["attention_mask"]
+        def_segment_ids = definition["token_type_ids"]
 
         feautures_X.append([text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
                             text_pos, def_input_ids, def_input_mask, def_segment_ids])
@@ -360,6 +349,7 @@ def data_preparation(texts, definitions, position, labels, tokenizer, max_len):
     return feautures_X, feautures_Y
 
 
+print(torch.cuda.is_available())
 
 df = pd.read_csv('../../nn_data.csv')
 
@@ -374,8 +364,7 @@ data_X, data_Y = data_preparation(df.text,
                                   df.definition,
                                   df.position,
                                   df.label,
-                                  BertTokenizer.from_pretrained('bert-base-uncased',
-                                                                return_offsets_mapping=True,
+                                  BertTokenizerFast.from_pretrained('sberbank-ai/sbert_large_mt_nlu_ru',
                                                                 do_lower_case=True),
                                   max_len)
 
@@ -384,6 +373,10 @@ train_X, test_X, train_Y, test_Y = train_test_split(data_X, data_Y, test_size = 
 train_dataset = DisambiguationDataset(train_X, train_Y)
 test_dataset = DisambiguationDataset(test_X, test_Y)
 
-# trainer = Trainer(num_epochs=40, batch_size=8, loss_fn=nn.BCELoss(), model=NerualNet(), device='cuda:0')
-#
-# trainer.fit(train_dataset=train_dataset,valid_dataset=valid_dataset)
+trainer = Trainer(num_epochs=40,
+                  batch_size=8,
+                  loss_fn=nn.BCELoss(),
+                  model=NerualNet(max_seq_len=max_len, device='cuda:0'),
+                  device='cuda:0')
+
+trainer.fit(train_dataset=train_dataset, valid_dataset=test_dataset)
