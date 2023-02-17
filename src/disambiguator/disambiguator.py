@@ -25,10 +25,11 @@ class DisambiguationDataset(Dataset):
         items = {"text_input_ids": torch.tensor(self.samples[index][0]),
                  "text_input_mask": torch.tensor(self.samples[index][1]),
                  "text_segment_ids": torch.tensor(self.samples[index][2]),
-                 "text_pos": torch.tensor(self.samples[index][3]),
-                 "def_input_ids": torch.tensor(self.samples[index][4]),
-                 "def_input_mask": torch.tensor(self.samples[index][5]),
-                 "def_segment_ids": torch.tensor(self.samples[index][6]),
+                 "text_offset_mapping": torch.tensor(self.samples[index][3]),
+                 "text_pos": torch.tensor(self.samples[index][4]),
+                 "def_input_ids": torch.tensor(self.samples[index][5]),
+                 "def_input_mask": torch.tensor(self.samples[index][6]),
+                 "def_segment_ids": torch.tensor(self.samples[index][7]),
                  "label": torch.tensor(self.labels[index])}
         return items
 
@@ -53,8 +54,8 @@ class NerualNet(nn.Module):
         embd_batch = torch.tensor([[[], []]]).to(device)
         for i in range(len(input_ids_def)):
             # получаем эмбединги ключевого слова из примера употребления
-            example_token_vec = self.get_vector(text_input_ids[i], text_segment_ids[i], text_input_mask[i])
             examples_token_key_word_position = self.token_detection(offset_mapping_samp[i][0], samp_position_samp[i])
+            example_token_vec = self.get_vector(text_input_ids[i], text_segment_ids[i], text_input_mask[i])
             example_embeddings = self.vector_recognition(example_token_vec, examples_token_key_word_position)
 
             # получаем эмбединг определения
@@ -70,14 +71,54 @@ class NerualNet(nn.Module):
 
 
     def get_defenition_embedding(self, def_input_ids, def_segment_ids, def_input_mask):
+        """
+        Функция получения вектора дефенишина сущности
+        :param def_input_ids:
+        :param def_segment_ids:
+        :param def_input_mask:
+        :return: bert pooler output vector
+        """
         with torch.no_grad():
             output = self.bert(input_ids=def_input_ids, token_type_ids=def_segment_ids,
                                 attention_mask=def_input_mask)
         hidden_states = output[1]
         return hidden_states
 
+    def token_detection(self, token_map, position):
+        """
+        Функция определения ключевого слова
+        :param token_map: list of tuples of begin and end of every token
+        :param position:  list of type: [int,int]
+        :return: list of key word tokens position
+        """
+        # из за того что в начале стоит CLS позиции начала и конца ключевого слова сдвигаются на 5
+        begin_postion = position[0]  # + 5
+        end_position = position[1]  # + 5
+
+        position_of_key_tokens = []
+        for token_tuple in range(1, len(token_map) - 1):
+            # Если ключевое слово представляется одним токеном
+            if token_map[token_tuple][0] == begin_postion and token_map[token_tuple][1] == end_position:
+                position_of_key_tokens.append(token_tuple)
+                break
+
+            # Если ключевое слово представляется несколькими токенами
+            if token_map[token_tuple][0] >= begin_postion and token_map[token_tuple][1] != end_position:
+                position_of_key_tokens.append(token_tuple)
+            if token_map[token_tuple][0] != begin_postion and token_map[token_tuple][1] == end_position:
+                position_of_key_tokens.append(token_tuple)
+                break
+
+        return position_of_key_tokens
+
     def get_vector(self, input_ids_samp, token_type_ids_samp, attention_mask_samp):
-        # Функция получения вектора ключевого слова
+        """
+        Функция получения вектора ключевого слова
+        :param input_ids_samp:
+        :param token_type_ids_samp:
+        :param attention_mask_samp:
+        :return:
+        """
         with torch.no_grad():
             outputs = self.model(input_ids=input_ids_samp, token_type_ids=token_type_ids_samp,
                                  attention_mask=attention_mask_samp)
@@ -93,35 +134,13 @@ class NerualNet(nn.Module):
 
         return token_vecs_cat
 
-    def token_detection(self, token_map, position):
-        # Функция определения ключевого слова
-        """
-        :param token_map: list of tuples of begin and end of every token
-        :param position:  list of type: [int,int]
-        :return: list of key word tokens position
-        """
-        # из за того что в начале стоит CLS позиции начала и конца ключевого слова сдвигаются на 5
-        begin_postion = position[0]  # + 5
-        end_position = position[1]  # + 5
-
-        position_of_key_tokens = []
-        for token_tuple in range(1, len(token_map) - 1):
-            # if token is one
-            if token_map[token_tuple][0] == begin_postion and token_map[token_tuple][1] == end_position:
-                position_of_key_tokens.append(token_tuple)
-                break
-
-            # if we have multipli count of tokens for one key word
-            if token_map[token_tuple][0] >= begin_postion and token_map[token_tuple][1] != end_position:
-                position_of_key_tokens.append(token_tuple)
-            if token_map[token_tuple][0] != begin_postion and token_map[token_tuple][1] == end_position:
-                position_of_key_tokens.append(token_tuple)
-                break
-
-        return position_of_key_tokens
-
     def vector_recognition(self, tokens_embeddings_ex, tokens_key_word_position_ex):
-        # Функция подготовки вектора в зависимости от количества токенов,которым представляется ключевое слово
+        """
+        Функция подготовки вектора в зависимости от количества токенов,которым представляется ключевое слово
+        :param tokens_embeddings_ex:
+        :param tokens_key_word_position_ex:
+        :return:
+        """
         if len(tokens_key_word_position_ex) > 1:
             embeddings_data = torch.tensor(
                 self.__get_avarage_embedding(tokens_embeddings_ex, tokens_key_word_position_ex))
@@ -132,7 +151,12 @@ class NerualNet(nn.Module):
         return embeddings_data
 
     def __get_avarage_embedding(self, embeddings_list, positions_list):
-        # Функция получения среднего вектора
+        """
+        Функция получения среднего вектора (применяется в случае если ключевое слово состоит из нескольких токенов)
+        :param embeddings_list:
+        :param positions_list:
+        :return:
+        """
         avg_tensor = torch.stack((embeddings_list[positions_list[0]],))
         for i in range(1, len(positions_list)):
             avg_tensor = torch.cat((avg_tensor, embeddings_list[positions_list[i]].unsqueeze(0)))
@@ -285,7 +309,7 @@ class Trainer():
 
             print(f"report: \n", classification_report(y_test, Y_pred))
 
-def data_preparation(texts, definitions, labels, tokenizer, max_len):
+def data_preparation(texts, definitions, position, labels, tokenizer, max_len):
     tokenizer = tokenizer
     feautures_X, feautures_Y = [], []
 
@@ -301,6 +325,8 @@ def data_preparation(texts, definitions, labels, tokenizer, max_len):
         text_input_ids += ([0] * padding_length)
         text_input_mask += ([0] * padding_length)
         text_segment_ids += ([0] * padding_length)
+        text_offset_mapping = text['offset_mapping']
+        text_pos = [position[i]]
 
         definition = tokenizer.tokenize(definition)
 
@@ -314,8 +340,8 @@ def data_preparation(texts, definitions, labels, tokenizer, max_len):
         def_input_mask += ([0] * padding_length)
         def_segment_ids += ([0] * padding_length)
 
-        feautures_X.append([text_input_ids, text_input_mask, text_segment_ids,
-                            def_input_ids, def_input_mask, def_segment_ids])
+        feautures_X.append([text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
+                            text_pos, def_input_ids, def_input_mask, def_segment_ids])
         feautures_Y.append(labels[i])
 
     return feautures_X, feautures_Y
@@ -333,8 +359,11 @@ if max_len_text > max_len_def:
 
 data_X, data_Y = data_preparation(df.text,
                                   df.definition,
+                                  df.position,
                                   df.label,
-                                  BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=True),
+                                  BertTokenizer.from_pretrained('bert-base-uncased',
+                                                                return_offsets_mapping=True,
+                                                                do_lower_case=True),
                                   max_len)
 
 train_X, test_X, train_Y, test_Y = train_test_split(data_X, data_Y, test_size = 0.2, random_state=42)
