@@ -73,13 +73,8 @@ class NerualNet(nn.Module):
         with torch.no_grad():
             output = self.bert(input_ids=def_input_ids, token_type_ids=def_segment_ids,
                                 attention_mask=def_input_mask)
-            hidden_states = output[2]
-
-        token_dim = torch.stack(hidden_states, dim=0)
-        token_dim = torch.squeeze(token_dim, dim=1)
-        token_dim = token_dim.permute(0, 1, 2)
-        cat_vec = torch.cat(((token_dim[-4][0] + token_dim[-3][0] + token_dim[-2][0] + token_dim[-1][0]),), dim=0)
-        return cat_vec
+        hidden_states = output[1]
+        return hidden_states
 
     def get_vector(self, input_ids_samp, token_type_ids_samp, attention_mask_samp):
         # Функция получения вектора ключевого слова
