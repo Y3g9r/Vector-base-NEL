@@ -15,9 +15,8 @@ import datetime as dt
 import gc
 
 class DisambiguationDataset(Dataset):
-    def __init__(self, samples,labels):
+    def __init__(self, samples):
         self.samples = samples
-        self.labels = labels
         self.len = len(self.samples)
 
     def __len__(self):
@@ -31,11 +30,10 @@ class DisambiguationDataset(Dataset):
                  "text_pos": torch.tensor(self.samples[index][4]),
                  "def_input_ids": torch.tensor(self.samples[index][5]),
                  "def_input_mask": torch.tensor(self.samples[index][6]),
-                 "def_segment_ids": torch.tensor(self.samples[index][7]),
-                 "label": torch.tensor(self.labels[index])}
+                 "def_segment_ids": torch.tensor(self.samples[index][7])}
         return items
 
-def data_preparation(texts, definitions, position, labels, tokenizer, max_len):
+def data_preparation(texts, definitions, position, tokenizer, max_len):
     tokenizer = tokenizer
     feautures_X, feautures_Y = [], []
 
@@ -56,9 +54,8 @@ def data_preparation(texts, definitions, position, labels, tokenizer, max_len):
 
         feautures_X.append([text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
                             text_pos, def_input_ids, def_input_mask, def_segment_ids])
-        feautures_Y.append(labels[i])
 
-    return feautures_X, feautures_Y
+    return feautures_X
 
 
 class NerualNet(nn.Module):
@@ -231,23 +228,43 @@ class NerualNet(nn.Module):
         return average_embedding
 
 
-class ModelInference():
+def make_predict(texts: list, positions: list, definitions: list, device="cpu"):
+    texts_list = texts
+    postions_list = positions
+    definitions_list = definitions
 
-    def __init__(self, texts: list, positions: list, definitions: list):
-        """
-        Инициализация модели
-        """
-        self.texts_list = texts
-        self.postions_list = positions
-        self.definitions_list = definitions
+    max_len_texts = max([len(entity) for entity in texts_list])
+    max_len_defs = max([len(definition) for definition in definitions_list])
 
-        max_len_texts = max([len(entity) for entity in self.texts_list])
-        max_len_defs = max([len(definition) for definition in self.definitions_list])
+    max_len = max_len_defs
+    if max_len_texts > max_len_defs:
+        max_len = max_len_texts
 
-        max_len = max_len_defs
-        if max_len_texts > max_len_defs:
-            max_len = max_len_texts
+    data_x = data_preparation(texts_list,
+                              definitions_list,
+                              postions_list,
+                              BertTokenizerFast.from_pretrained('sberbank-ai/sbert_large_mt_nlu_ru',
+                                                                do_lower_case=True),
+                              max_len)
+    dataset = DisambiguationDataset(data_x)
 
-        self.NerualNet(max_seq_len=max_len, device='cuda:0')
+    with torch.no_grad():
+        NerualNet(max_seq_len=max_len, device='cuda:0')
+        for sample in dataset:
+            text_input_ids = sample["text_input_ids"].to(device)
+            text_input_mask = sample["text_input_mask"].to(device)
+            text_segment_ids = sample["text_segment_ids"].to(device)
+            text_offset_mapping = sample["text_offset_mapping"].to(device)
+            text_pos = sample["text_pos"].to(device)
+            def_input_ids = sample["def_input_ids"].to(device)
+            def_input_mask = sample["def_input_mask"].to(device)
+            def_segment_ids = sample["def_segment_ids"].to(device)
 
-    def predict
+            predicted_values = NerualNet(text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
+                                         text_pos, def_input_ids, def_input_mask, def_segment_ids).float()
+            print(predicted_values)
+
+
+
+
+
