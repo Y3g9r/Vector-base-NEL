@@ -34,7 +34,7 @@ class CandidatesSelector():
                         }],
                         "must_not": [{
                             "match": {
-                                "descriptions.ru": "страница значений"
+                                "descriptions.ru": "страница значений астероид"
                             }
                         }]
                     }
