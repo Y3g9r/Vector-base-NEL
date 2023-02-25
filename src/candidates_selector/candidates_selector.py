@@ -4,7 +4,7 @@ import elasticsearch
 
 class CandidatesSelector():
 
-    def __init__(self, candidates_limit: int = 3):
+    def __init__(self, candidates_limit: int = 10):
         self._morph = pymorphy2.MorphAnalyzer(lang='ru')
         self.candidates_limit = candidates_limit
         self.es = elasticsearch.Elasticsearch(IP)

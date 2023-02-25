@@ -241,36 +241,56 @@ def make_predict(texts: list, positions: list, definitions: list, device="cpu"):
     postions_list = positions
     definitions_list = definitions
 
-    max_len_texts = max([len(entity) for entity in texts_list])
-    max_len_defs = max([len(definition) for definition in definitions_list])
+    pd_texts = []
+    pd_positions = []
+    pd_definitions = []
+    for i in range(len(definitions_list)):
+        for j in range(len(definitions_list[i])):
+            for k in range(len(definitions_list[i][j])):
+                pd_texts.append(str(texts_list[i]))
+                pd_positions.append(postions_list[i][j])
+                pd_definitions.append(str(definitions_list[i][j][k]))
+
+    df = pd.DataFrame({'text': pd_texts, 'positions': pd_positions, 'definitions': pd_definitions})
+
+    max_len_texts = df.text.str.len().max()
+    max_len_defs = df.definitions.str.len().max()
 
     max_len = max_len_defs
     if max_len_texts > max_len_defs:
         max_len = max_len_texts
 
-    for text in texts_list:
-        for i, position in enumerate(postions_list):
-            data_x = data_preparation(text,
-                                      definitions_list,
-                                      postions_list,
-                                      BertTokenizerFast.from_pretrained('sberbank-ai/sbert_large_mt_nlu_ru',
-                                                                        do_lower_case=True),
-                                      max_len)
-            dataset = DisambiguationDataset(data_x)
+    with torch.no_grad():
+        model = NerualNet(max_seq_len=max_len, device=device)
+        model.eval()
+        model.load_state_dict(torch.load("./../disambiguator/modelN72f.pth"))
+        model.to(device)
+        predicted_values=[]
+        data_x = data_preparation(df.text,
+                                  df.definitions,
+                                  df.positions,
+                                  BertTokenizerFast.from_pretrained('sberbank-ai/sbert_large_mt_nlu_ru',
+                                                                    do_lower_case=True),
+                                  max_len)
+        dataset = DisambiguationDataset(data_x)
+        loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
+        for sample in loader:
+            text_input_ids = sample["text_input_ids"].to(device)
+            text_input_mask = sample["text_input_mask"].to(device)
+            text_segment_ids = sample["text_segment_ids"].to(device)
+            text_offset_mapping = sample["text_offset_mapping"].to(device)
+            text_pos = sample["text_pos"].to(device)
+            def_input_ids = sample["def_input_ids"].to(device)
+            def_input_mask = sample["def_input_mask"].to(device)
+            def_segment_ids = sample["def_segment_ids"].to(device)
 
-            with torch.no_grad():
-                model = NerualNet(max_seq_len=max_len, device='cuda:0')
-                model.load("./modelN.pth")
-                for i, sample in enumerate(dataset):
-                    text_input_ids = sample["text_input_ids"].to(device)
-                    text_input_mask = sample["text_input_mask"].to(device)
-                    text_segment_ids = sample["text_segment_ids"].to(device)
-                    text_offset_mapping = sample["text_offset_mapping"].to(device)
-                    text_pos = sample["text_pos"].to(device)
-                    def_input_ids = sample["def_input_ids"].to(device)
-                    def_input_mask = sample["def_input_mask"].to(device)
-                    def_segment_ids = sample["def_segment_ids"].to(device)
+            predicted = model(text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
+                                         text_pos, def_input_ids, def_input_mask, def_segment_ids).float()
+            predicted_values.append(predicted.cpu().detach().numpy())
+        df['predicted'] = predicted_values
 
-                    predicted_values = NerualNet(text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
-                                                 text_pos, def_input_ids, def_input_mask, def_segment_ids).float()
-                    print(predicted_values, definitions_list[i], postions_list[i])
+    pd.set_option('display.max_rows', None)
+    pd.set_option('display.max_columns', None)
+    pd.set_option('display.max_colwidth', None)
+    print(df)
+

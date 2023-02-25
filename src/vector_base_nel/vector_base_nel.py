@@ -3,8 +3,6 @@ from candidates_selector.candidates_selector import CandidatesSelector
 from disambiguator.disambiguator import make_predict
 import argparse
 
-
-
 def make_links(args):
     texts_list = args.string
 
@@ -16,7 +14,7 @@ def make_links(args):
     candidate_selector = CandidatesSelector()
     definitions = candidate_selector.get_candidates(entitys_text)
 
-    make_predict(sentences, entitys_positions, definitions)
+    make_predict(sentences, entitys_positions, definitions, "cuda:0")
 
 def parse_args():
     parser = argparse.ArgumentParser()
