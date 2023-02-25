@@ -229,6 +229,14 @@ class NerualNet(nn.Module):
 
 
 def make_predict(texts: list, positions: list, definitions: list, device="cpu"):
+    """
+    Делает предикты
+    :param texts:
+    :param positions:
+    :param definitions:
+    :param device:
+    :return:
+    """
     texts_list = texts
     postions_list = positions
     definitions_list = definitions
@@ -240,31 +248,29 @@ def make_predict(texts: list, positions: list, definitions: list, device="cpu"):
     if max_len_texts > max_len_defs:
         max_len = max_len_texts
 
-    data_x = data_preparation(texts_list,
-                              definitions_list,
-                              postions_list,
-                              BertTokenizerFast.from_pretrained('sberbank-ai/sbert_large_mt_nlu_ru',
-                                                                do_lower_case=True),
-                              max_len)
-    dataset = DisambiguationDataset(data_x)
+    for text in texts_list:
+        for i, position in enumerate(postions_list):
+            data_x = data_preparation(text,
+                                      definitions_list,
+                                      postions_list,
+                                      BertTokenizerFast.from_pretrained('sberbank-ai/sbert_large_mt_nlu_ru',
+                                                                        do_lower_case=True),
+                                      max_len)
+            dataset = DisambiguationDataset(data_x)
 
-    with torch.no_grad():
-        NerualNet(max_seq_len=max_len, device='cuda:0')
-        for sample in dataset:
-            text_input_ids = sample["text_input_ids"].to(device)
-            text_input_mask = sample["text_input_mask"].to(device)
-            text_segment_ids = sample["text_segment_ids"].to(device)
-            text_offset_mapping = sample["text_offset_mapping"].to(device)
-            text_pos = sample["text_pos"].to(device)
-            def_input_ids = sample["def_input_ids"].to(device)
-            def_input_mask = sample["def_input_mask"].to(device)
-            def_segment_ids = sample["def_segment_ids"].to(device)
+            with torch.no_grad():
+                model = NerualNet(max_seq_len=max_len, device='cuda:0')
+                model.load("./modelN.pth")
+                for i, sample in enumerate(dataset):
+                    text_input_ids = sample["text_input_ids"].to(device)
+                    text_input_mask = sample["text_input_mask"].to(device)
+                    text_segment_ids = sample["text_segment_ids"].to(device)
+                    text_offset_mapping = sample["text_offset_mapping"].to(device)
+                    text_pos = sample["text_pos"].to(device)
+                    def_input_ids = sample["def_input_ids"].to(device)
+                    def_input_mask = sample["def_input_mask"].to(device)
+                    def_segment_ids = sample["def_segment_ids"].to(device)
 
-            predicted_values = NerualNet(text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
-                                         text_pos, def_input_ids, def_input_mask, def_segment_ids).float()
-            print(predicted_values)
-
-
-
-
-
+                    predicted_values = NerualNet(text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
+                                                 text_pos, def_input_ids, def_input_mask, def_segment_ids).float()
+                    print(predicted_values, definitions_list[i], postions_list[i])

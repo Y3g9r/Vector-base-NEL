@@ -4,10 +4,10 @@ import elasticsearch
 
 class CandidatesSelector():
 
-    def __init__(self, es_host, candidates_limit: int = 3):
+    def __init__(self, candidates_limit: int = 3):
         self._morph = pymorphy2.MorphAnalyzer(lang='ru')
         self.candidates_limit = candidates_limit
-        self.es = elasticsearch.Elasticsearch(es_host)
+        self.es = elasticsearch.Elasticsearch(IP)
 
         self.index = "wikipedia-ru"
         self.type = "item"
@@ -64,6 +64,6 @@ class CandidatesSelector():
 
 
 
-sentence_entitys_list = [["Артёма",'Организация объединённых наций'],['МВД']]
-candidate_selector = CandidatesSelector(IP)
-print(candidate_selector.get_candidates(sentence_entitys_list))
+# sentence_entitys_list = [["Артёма",'Организация объединённых наций'],['МВД']]
+# candidate_selector = CandidatesSelector()
+# print(candidate_selector.get_candidates(sentence_entitys_list))

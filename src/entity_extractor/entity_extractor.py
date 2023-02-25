@@ -52,9 +52,9 @@ class EntityExtractor():
         return self.entity_text
 
 
-text = "Алексей А.В. из Артёмовска и Пётр М.Е из Магадана пошли к реке. Никто не видел Артёма.. . Но все знали, что он рядом!"
-entity_extractor = EntityExtractor(text)
-
-print(entity_extractor.get_entitys_positions())
-print(entity_extractor.get_entitys_text())
-print(entity_extractor.get_sentences())
+# text = "Алексей А.В. из Артёмовска и Пётр М.Е из Магадана пошли к реке. Никто не видел Артёма.. . Но все знали, что он рядом!"
+# entity_extractor = EntityExtractor(text)
+#
+# print(entity_extractor.get_entitys_positions())
+# print(entity_extractor.get_entitys_text())
+# print(entity_extractor.get_sentences())
