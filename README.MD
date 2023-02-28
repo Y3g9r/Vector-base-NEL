@@ -15,13 +15,13 @@ $ docker-compose up -d
 ```
 
 #### 3. Сбор базы данных
-Перед запуском сервера удостовериться, что создан экземпляр Elasticsearch  
+Перед запуском сбора необходимо удостовериться, что создан экземпляр Elasticsearch  
 
 Также необходимо скачать дамп с ресурса wikidata(3.5GB):  
-https://archive.org/details/wikidata-json-20150202
+https://archive.org/details/wikidata-json-20150202  
 И поместить его в директорию Vector-base-NEL
 
-Для сбора базы данных сущность-описание:
+Запустить сбор сущность-описание:
 ```bash
 $ python ./src/data_preparation/wd_dump_to_es.py
 ```
@@ -29,7 +29,6 @@ $ python ./src/data_preparation/wd_dump_to_es.py
 #### 4. Обучение модели
 Для обучения модели необходимо запустить команду ниже, все параметры обучения установлены внутри
 
-Для запуска сервера:
 ```bash
 $ python ./src/disambiguator/LearnModel.py
 ```
@@ -37,7 +36,6 @@ $ python ./src/disambiguator/LearnModel.py
 #### 5. Запуск инференса
 Для запуска инференса необходимо запустить следующую команду
 
-Для запуска сервера:
 ```bash
 $ python ./src/vector_base_nel/vector_base_nel.py -s "текст пользователя"
 ```
