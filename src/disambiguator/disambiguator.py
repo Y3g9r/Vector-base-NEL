@@ -294,3 +294,4 @@ def make_predict(texts: list, positions: list, definitions: list, device="cpu"):
     pd.set_option('display.max_colwidth', None)
     print(df)
 
+

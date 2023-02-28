@@ -23,7 +23,7 @@ class CandidatesSelector():
         for entity in entitys_list:
             body = {
                 "query": {
-                    "bool":{
+                    "bool": {
                         "must": [{
                             "match": {
                                 "labels.ru": entity
