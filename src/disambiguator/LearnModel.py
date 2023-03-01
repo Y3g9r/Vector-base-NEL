@@ -367,66 +367,67 @@ class Trainer():
 
             print(f"report: \n", classification_report(y_test, Y_pred))
 
-        def data_preparation(texts, definitions, position, labels, tokenizer, max_len):
-            tokenizer = tokenizer
-            feautures_X, feautures_Y = [], []
+def data_preparation(texts, definitions, position, labels, tokenizer, max_len):
+    tokenizer = tokenizer
+    feautures_X, feautures_Y = [], []
 
-            for i, (text, definition) in enumerate(zip(texts, definitions)):
-                text = tokenizer(text, return_offsets_mapping=True, max_length=max_len, truncation=True,
-                                 padding='max_length')
+    for i, (text, definition) in enumerate(zip(texts, definitions)):
+        text = tokenizer(text, return_offsets_mapping=True, max_length=max_len, truncation=True,
+                         padding='max_length')
 
-                text_input_ids = text["input_ids"]
-                text_input_mask = text["attention_mask"]
-                text_segment_ids = text["token_type_ids"]
-                text_offset_mapping = text["offset_mapping"]
-                text_pos = [position[i]]
+        text_input_ids = text["input_ids"]
+        text_input_mask = text["attention_mask"]
+        text_segment_ids = text["token_type_ids"]
+        text_offset_mapping = text["offset_mapping"]
+        text_pos = [position[i]]
 
-                definition = tokenizer(definition, return_offsets_mapping=True, max_length=max_len,
-                                       padding='max_length', truncation=True)
+        definition = tokenizer(definition, return_offsets_mapping=True, max_length=max_len,
+                               padding='max_length', truncation=True)
 
-                def_input_ids = definition["input_ids"]
-                def_input_mask = definition["attention_mask"]
-                def_segment_ids = definition["token_type_ids"]
+        def_input_ids = definition["input_ids"]
+        def_input_mask = definition["attention_mask"]
+        def_segment_ids = definition["token_type_ids"]
 
-                feautures_X.append([text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
-                                    text_pos, def_input_ids, def_input_mask, def_segment_ids])
-                feautures_Y.append(labels[i])
+        feautures_X.append([text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
+                            text_pos, def_input_ids, def_input_mask, def_segment_ids])
+        feautures_Y.append(labels[i])
 
-            return feautures_X, feautures_Y
+    return feautures_X, feautures_Y
 
-        torch.cuda.empty_cache()
-        gc.collect()
 
-        df = pd.read_csv('./../../nn_data.csv')
-        len(df)
-        df.position = df.position.apply(lambda x: ast.literal_eval(x))
+torch.cuda.empty_cache()
+gc.collect()
 
-        max_len_text = df.text.str.len().max()
-        max_len_def = df.definition.str.len().max()
+df = pd.read_csv('./../../nn_data.csv')
+len(df)
+df.position = df.position.apply(lambda x: ast.literal_eval(x))
 
-        max_len = max_len_def
-        if max_len_text > max_len_def:
-            max_len = max_len_text
+max_len_text = df.text.str.len().max()
+max_len_def = df.definition.str.len().max()
 
-        data_X, data_Y = data_preparation(df.text,
-                                          df.definition,
-                                          df.position,
-                                          df.label,
-                                          BertTokenizerFast.from_pretrained('sberbank-ai/sbert_large_mt_nlu_ru',
-                                                                            do_lower_case=True),
-                                          max_len)
+max_len = max_len_def
+if max_len_text > max_len_def:
+    max_len = max_len_text
 
-        train_X, test_X, train_Y, test_Y = train_test_split(data_X, data_Y, test_size=0.2, random_state=42)
+data_X, data_Y = data_preparation(df.text,
+                                  df.definition,
+                                  df.position,
+                                  df.label,
+                                  BertTokenizerFast.from_pretrained('sberbank-ai/sbert_large_mt_nlu_ru',
+                                                                    do_lower_case=True),
+                                  max_len)
 
-        train_dataset = DisambiguationDataset(train_X, train_Y)
-        test_dataset = DisambiguationDataset(test_X, test_Y)
+train_X, test_X, train_Y, test_Y = train_test_split(data_X, data_Y, test_size=0.2, random_state=42)
 
-        trainer = Trainer(num_epochs=40,
-                          batch_size=8,
-                          loss_fn=nn.BCELoss(),
-                          model=NerualNet(max_seq_len=max_len, device='cuda:0'),
-                          device='cuda:0')
+train_dataset = DisambiguationDataset(train_X, train_Y)
+test_dataset = DisambiguationDataset(test_X, test_Y)
 
-        trainer.fit(train_dataset=train_dataset, valid_dataset=test_dataset)
+trainer = Trainer(num_epochs=40,
+                  batch_size=8,
+                  loss_fn=nn.BCELoss(),
+                  model=NerualNet(max_seq_len=max_len, device='cuda:0'),
+                  device='cuda:0')
 
-        torch.save(trainer.best_model.state_dict(), "./modelN72f.pth")
+trainer.fit(train_dataset=train_dataset, valid_dataset=test_dataset)
+
+torch.save(trainer.best_model.state_dict(), "./modelN72f.pth")
