@@ -263,7 +263,7 @@ def make_predict(texts: list, positions: list, definitions: list, device="cpu"):
     with torch.no_grad():
         model = NerualNet(max_seq_len=max_len, device=device)
         model.eval()
-        model.load_state_dict(torch.load("./../disambiguator/modelN72f.pth"))
+        model.load_state_dict(torch.load("./../disambiguator/modelN73f(32b).pth"))
         model.to(device)
         predicted_values=[]
         data_x = data_preparation(df.text,
@@ -286,12 +286,19 @@ def make_predict(texts: list, positions: list, definitions: list, device="cpu"):
 
             predicted = model(text_input_ids, text_input_mask, text_segment_ids, text_offset_mapping,
                                          text_pos, def_input_ids, def_input_mask, def_segment_ids).float()
-            predicted_values.append(predicted.cpu().detach().numpy())
+            predicted_values.append(float(predicted.cpu().detach().numpy()[0]))
         df['predicted'] = predicted_values
+        df['list_str'] = df.positions.apply(lambda y: str(y))
+        agg_df = df.groupby('list_str').apply(lambda x: x.nlargest(1, "predicted"))
 
-    pd.set_option('display.max_rows', None)
-    pd.set_option('display.max_columns', None)
-    pd.set_option('display.max_colwidth', None)
-    print(df)
+        sentences_defs = {}
+        for sentence in agg_df.text:
+            sentences_defs[sentence] = []
+        for i, sentence in enumerate(agg_df.definitions):
+            sentences_defs[agg_df.text[i]].append(agg_df.text[i][agg_df.positions[i][0]:agg_df.positions[i][1]] + " - " + sentence)
 
-
+    for sentence in sentences_defs:
+        print('\n')
+        print(sentence)
+        for defintion in sentences_defs[sentence]:
+            print(defintion)
