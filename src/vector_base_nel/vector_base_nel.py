@@ -14,7 +14,14 @@ def make_links(args):
     candidate_selector = CandidatesSelector()
     definitions = candidate_selector.get_candidates(entitys_text)
 
-    make_predict(sentences, entitys_positions, definitions, "cuda:0")
+    sentences_defs = make_predict(sentences, entitys_positions, definitions, "cuda:0")
+
+    for sentence in sentences_defs:
+        print(sentence)
+        print('======')
+        for defintion in sentences_defs[sentence]:
+            print(defintion)
+        print('\n')
 
 def parse_args():
     parser = argparse.ArgumentParser()

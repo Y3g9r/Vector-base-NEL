@@ -263,7 +263,7 @@ def make_predict(texts: list, positions: list, definitions: list, device="cpu"):
     with torch.no_grad():
         model = NerualNet(max_seq_len=max_len, device=device)
         model.eval()
-        model.load_state_dict(torch.load("./../disambiguator/modelN73f(32b).pth"))
+        model.load_state_dict(torch.load("./../disambiguator/modelN73f.pth"))
         model.to(device)
         predicted_values=[]
         data_x = data_preparation(df.text,
@@ -297,8 +297,6 @@ def make_predict(texts: list, positions: list, definitions: list, device="cpu"):
         for i, sentence in enumerate(agg_df.definitions):
             sentences_defs[agg_df.text[i]].append(agg_df.text[i][agg_df.positions[i][0]:agg_df.positions[i][1]] + " - " + sentence)
 
-    for sentence in sentences_defs:
-        print('\n')
-        print(sentence)
-        for defintion in sentences_defs[sentence]:
-            print(defintion)
+        return sentences_defs
+
+
